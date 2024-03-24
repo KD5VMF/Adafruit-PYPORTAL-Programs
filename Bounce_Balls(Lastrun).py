@@ -10,13 +10,11 @@ import adafruit_touchscreen
 Title: Neon Bouncing Balls Simulation with Enhanced Color Variety
 
 About: This enhanced program simulates bouncing balls on a PyPortal display, each changing its color randomly 
-from a set of 150 bright neon shades. The balls grow in size after hitting walls or other balls, then stay at 
+from a set of 125 bright neon shades. The balls grow in size after hitting walls or other balls, then stay at 
 maximum size for a duration before shrinking to a minimum size. Users can interact with the balls using touch 
 input to change their direction and speed. The simulation, running on the Adafruit PyPortal, showcases the 
 capabilities of CircuitPython with a touchscreen display and vibrant graphics.
 
-Author: [Your Name]
-Date: [Date of Modification]
 """
 
 # Display Settings
