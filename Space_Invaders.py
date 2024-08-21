@@ -46,7 +46,6 @@ Adafruit PyPortal. Feel free to experiment with the code and add your own featur
 Developed by: Chat-GPT4o with Direction from Adam Figueroa
 """
 
-
 import board
 import displayio
 import time
@@ -96,7 +95,7 @@ invader_wins = 0
 total_games_played = 0
 game_over = False
 game_running = True
-player_lives = 6  # Player starts with 6 lives
+player_lives = 10  # Player starts with 5 lives
 
 # Timing for forced movement and delays for optimization
 corner_timer = None
@@ -197,9 +196,9 @@ def player_move():
             elif time.monotonic() - corner_timer >= CORNER_MOVE_TIMEOUT:
                 # Force player to move out of corner after timeout
                 if player.x <= 0:
-                    player.x += PLAYER_MOVE_SPEED * 2  # Move right
+                    player.x = int(player.x + PLAYER_MOVE_SPEED * 2)  # Move right, cast to int
                 elif player.x >= display.width - player.width:
-                    player.x -= PLAYER_MOVE_SPEED * 2  # Move left
+                    player.x = int(player.x - PLAYER_MOVE_SPEED * 2)  # Move left, cast to int
                 player_in_corner = False  # Reset corner status after moving
         else:
             player_in_corner = False  # Reset corner status when player is not in a corner
@@ -207,12 +206,16 @@ def player_move():
         # Perform small random human-like movements when not dodging
         if random.random() < 0.3:  # Increased chance of random movement
             if player.x > display.width // 2 and player.x - PLAYER_MOVE_SPEED >= 0:
-                player.x -= PLAYER_MOVE_SPEED  # Small left nudge
+                player.x = int(player.x - PLAYER_MOVE_SPEED)  # Small left nudge, cast to int
             elif player.x < display.width // 2 and player.x + player.width + PLAYER_MOVE_SPEED <= display.width:
-                player.x += PLAYER_MOVE_SPEED  # Small right nudge
+                player.x = int(player.x + PLAYER_MOVE_SPEED)  # Small right nudge, cast to int
 
         # Player will dodge based on shot proximity
         player_avoid_shots()
+
+        # Ensure player.x is an integer after all calculations
+        player.x = int(player.x)
+
         player_move_timer = time.monotonic()  # Reset the timer
 
 def player_avoid_shots():
@@ -323,7 +326,7 @@ def show_game_over(winner_text):
         reset_game()
 
 def level_up():
-    global level, player_intelligence, invader_intelligence, invader_speed, player_shot_speed, invader_shot_speed
+    global level, player_intelligence, invader_intelligence, invader_speed, player_shot_speed, invader_shot_speed, PLAYER_MOVE_SPEED, DODGE_DISTANCE
     level += 1
     if level > MAX_LEVEL:
         level = 1
@@ -333,19 +336,23 @@ def level_up():
 
     level_label.text = f"Level: {level}"
     
-    # Increase intelligence and other parameters if not resetting to level 1
+    # Increase intelligence and other parameters more aggressively
     if level != 1:
-        player_intelligence = min(player_intelligence + 3, 100)
-        invader_intelligence = min(invader_intelligence + 3, 100)
+        player_intelligence = min(player_intelligence + 5, 100)  # Faster increase in intelligence
+        invader_intelligence = min(invader_intelligence + 3, 100)  # Keep invader intelligence growth moderate
+
+    # Increase player speed and dodging abilities more aggressively
+    PLAYER_MOVE_SPEED += 0.5  # Gradually increase player speed
+    DODGE_DISTANCE += 1  # Increase dodge distance for more efficient dodging
     
-    invader_speed = INVADER_SPEED_BASE + level * 0.02  # Slightly slower speed increase
-    player_shot_speed += 0.008  # Slower shot speed increase
-    invader_shot_speed += 0.008
+    invader_speed = INVADER_SPEED_BASE + level * 0.015  # Slightly slower invader speed growth
+    player_shot_speed += 0.01  # Increase player shot speed faster
+    invader_shot_speed += 0.008  # Keep invader shot speed growth moderate
     reset_game()
 
 def reset_game():
     global shots, invader_shots, game_over, player_lives
-    player_lives = 3  # Reset lives at the start of a new game
+    player_lives = 10  # Reset lives at the start of a new game
     lives_label.text = f"Lives: {player_lives}"
     # Remove all invaders and shots, but leave player and level label intact
     for obj in invaders + shots + invader_shots:
@@ -413,4 +420,3 @@ while game_running:
 
 while True:
     pass  # Keeps the program running after the game ends
-
