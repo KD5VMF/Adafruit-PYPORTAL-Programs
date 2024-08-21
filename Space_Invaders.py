@@ -1,3 +1,52 @@
+"""
+Space Invaders-Style Game for Adafruit PyPortal
+===============================================
+
+This is a simple "Space Invaders"-style game developed for the Adafruit PyPortal.
+The player controls a green rectangle at the bottom of the screen that moves
+automatically and shoots at the invaders. The invaders are red, blue, and yellow
+rectangles that move across the screen, reverse direction when they hit the edges,
+and shoot back at the player.
+
+Gameplay:
+---------
+- The player must destroy all invaders to win each level.
+- The player automatically moves left and right, and will dodge shots when needed.
+- As the player progresses through levels, additional rows of invaders are added,
+  making the game more challenging. The invaders' speed, shooting frequency, and
+  intelligence also increase with each level.
+
+Features:
+---------
+- Levels dynamically increase in difficulty, with more rows of invaders appearing.
+- Invader rows are color-coded: red for the first row, blue for the second row,
+  and yellow for the third row.
+- The PyPortal's onboard NeoPixel backlight provides feedback on the game's progress:
+  green if the player is winning, red if the invaders are winning, and off if the
+  game is tied.
+- Automatic collision detection handles hits between shots and invaders or the player.
+
+Controls and Behavior:
+----------------------
+- The game runs automatically without player input. The player moves left and right
+  on its own, shooting at invaders when aligned with them.
+- The game resets after each round, and the player progresses to the next level with
+  more invaders.
+
+Optimized for PyPortal:
+-----------------------
+- The code is optimized to run smoothly on the Adafruit PyPortal by throttling
+  the movement and shooting updates to prevent performance issues.
+- Movement and screen updates are controlled through timed delays to ensure
+  consistent behavior.
+
+This game is designed to be easily shared and enjoyed by anyone who has an
+Adafruit PyPortal. Feel free to experiment with the code and add your own features!
+
+Developed by: Chat-GPT4o with Direction from Adam Figueroa
+"""
+
+
 import board
 import displayio
 import time
