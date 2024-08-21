@@ -96,7 +96,7 @@ invader_wins = 0
 total_games_played = 0
 game_over = False
 game_running = True
-player_lives = 3  # Player starts with 5 lives
+player_lives = 6  # Player starts with 6 lives
 
 # Timing for forced movement and delays for optimization
 corner_timer = None
