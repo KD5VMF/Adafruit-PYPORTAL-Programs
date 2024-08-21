@@ -5,24 +5,37 @@ import random
 from adafruit_display_shapes.rect import Rect
 from adafruit_display_text import label
 import terminalio
+import neopixel  # To control the backlight
 
 # Setup display
 display = board.DISPLAY
 screen = displayio.Group()
 
+# Setup the backlight (using the onboard NeoPixel)
+pixels = neopixel.NeoPixel(board.NEOPIXEL, 1)
+pixels.brightness = 1.0  # Full brightness
+
+def update_backlight():
+    if player_wins > invader_wins:
+        pixels.fill((0, 255, 0))  # Green for player leading
+    elif invader_wins > player_wins:
+        pixels.fill((255, 0, 0))  # Red for invader leading
+    else:
+        pixels.fill((0, 0, 0))  # Backlight off if tied
+
 # Constants
 INVADER_SPEED_BASE = 0.5
 PLAYER_SHOT_SPEED_BASE = 0.1
 INVADER_SHOT_SPEED_BASE = 0.1
-PLAYER_MOVE_SPEED_SMALL = 3
-PLAYER_MOVE_SPEED_MEDIUM = 5
-PLAYER_MOVE_SPEED_LARGE = 8
-PLAYER_MOVE_SPEED_FAR = 12  # For far, human-like moves
+PLAYER_MOVE_SPEED = 5  # Base movement speed
+DODGE_DISTANCE = 20    # Distance to move when dodging a shot
+CORNER_MOVE_TIMEOUT = 3  # 3 seconds in the corner before forced movement
 MAX_LEVEL = 100
+MIN_INTELLIGENCE = 45  # Minimum intelligence value for both player and invader
 
 # AI intelligence levels (1-100)
-player_intelligence = 50
-invader_intelligence = 50
+player_intelligence = 45
+invader_intelligence = 45
 
 # Game variables
 level = 1
@@ -34,7 +47,15 @@ invader_wins = 0
 total_games_played = 0
 game_over = False
 game_running = True
-player_direction = 1  # Player movement direction
+player_lives = 3  # Player starts with 5 lives
+
+# Timing for forced movement and delays for optimization
+corner_timer = None
+player_in_corner = False
+INVADER_MOVE_DELAY = 0.02  # Delay between invader movements
+PLAYER_MOVE_DELAY = 0.1
+invader_move_timer = time.monotonic()
+player_move_timer = time.monotonic()
 
 # Create player
 player = Rect(display.width // 2 - 10, display.height - 20, 20, 10, fill=0x00FF00)
@@ -63,6 +84,12 @@ games_played_label.x = 5
 games_played_label.y = 50
 screen.append(games_played_label)
 
+# Create player lives label
+lives_label = label.Label(terminalio.FONT, text=f"Lives: {player_lives}", color=0x00FF00)
+lives_label.x = display.width - 60
+lives_label.y = 5
+screen.append(lives_label)
+
 # Create invaders and store their exact positions as floats
 invaders = []
 invader_positions = []
@@ -72,59 +99,109 @@ def create_invaders():
     invaders = []
     invader_positions = []
     invader_direction = 1
-    for i in range(10):
-        invader = Rect(10 + (i * 15), 10, 10, 10, fill=0xFF0000)
-        invaders.append(invader)
-        invader_positions.append(10 + (i * 15))  # Store the initial position as a float
-        screen.append(invader)
+
+    num_rows = get_invader_rows()  # Determine the number of rows based on the level
+    row_colors = [0xFF0000, 0x0000FF, 0xFFFF00]  # Colors for each row (Red, Blue, Yellow)
+
+    for row in range(num_rows):
+        for i in range(10):
+            invader = Rect(10 + (i * 15), 10 + row * 15, 10, 10, fill=row_colors[row])
+            invaders.append(invader)
+            invader_positions.append(10 + (i * 15))  # Store the initial position as a float
+            screen.append(invader)
+
+def get_invader_rows():
+    """
+    Determines how many rows of invaders should be displayed based on the level.
+    1 row for early levels, 2 rows at 1/3 of the way, and 3 rows at 2/3 of the way.
+    """
+    if level >= (MAX_LEVEL * 2) // 3:
+        return 3  # 3 rows in the last third of levels
+    elif level >= MAX_LEVEL // 3:
+        return 2  # 2 rows in the middle third of levels
+    else:
+        return 1  # 1 row in the first third of levels
 
 def move_invaders():
-    global invader_direction
-    for i in range(len(invaders)):
-        invader_positions[i] += invader_direction * invader_speed  # Update the float position
-        invaders[i].x = int(invader_positions[i])  # Set the integer value for display
+    global invader_direction, invader_move_timer
+    if time.monotonic() - invader_move_timer > INVADER_MOVE_DELAY:  # Throttle invader movement
+        for i in range(len(invaders)):
+            invader_positions[i] += invader_direction * invader_speed  # Update the float position
+            invaders[i].x = int(invader_positions[i])  # Set the integer value for display
 
-    # Change direction when reaching the edge of the screen
-    if any(invader.x <= 0 or invader.x >= display.width - invader.width for invader in invaders):
-        invader_direction *= -1
-        for invader in invaders:
-            invader.y += 10  # Move invaders down
+        # Change direction when reaching the edge of the screen
+        if any(invader.x <= 0 or invader.x >= display.width - invader.width for invader in invaders):
+            invader_direction *= -1
+            for invader in invaders:
+                invader.y += 10  # Move invaders down
+        invader_move_timer = time.monotonic()  # Reset the timer
 
 def player_move():
-    global player, player_direction, player_intelligence
-    # Force player to keep moving to prevent staying in one place
-    move_distance = random.choice([PLAYER_MOVE_SPEED_SMALL, PLAYER_MOVE_SPEED_MEDIUM, PLAYER_MOVE_SPEED_LARGE, PLAYER_MOVE_SPEED_FAR])
+    global corner_timer, player_in_corner, player_move_timer
 
-    if player_intelligence > random.randint(0, 100):
-        if player_direction == 1:  # Move right
-            if player.x + player.width < display.width:
-                player.x += move_distance
-            else:
-                player_direction = -1  # Change direction
-        elif player_direction == -1:  # Move left
-            if player.x > 0:
-                player.x -= move_distance
-            else:
-                player_direction = 1  # Change direction
+    if time.monotonic() - player_move_timer > PLAYER_MOVE_DELAY:  # Throttle player movement
+        # Check if player is staying in a corner
+        if player.x <= 0 or player.x >= display.width - player.width:
+            if not player_in_corner:
+                player_in_corner = True
+                corner_timer = time.monotonic()  # Start corner timer
+            elif time.monotonic() - corner_timer >= CORNER_MOVE_TIMEOUT:
+                # Force player to move out of corner after timeout
+                if player.x <= 0:
+                    player.x += PLAYER_MOVE_SPEED * 2  # Move right
+                elif player.x >= display.width - player.width:
+                    player.x -= PLAYER_MOVE_SPEED * 2  # Move left
+                player_in_corner = False  # Reset corner status after moving
+        else:
+            player_in_corner = False  # Reset corner status when player is not in a corner
 
-        # Randomly change direction based on intelligence
-        if random.random() < player_intelligence / 200:  # Higher intelligence means more deliberate direction changes
-            player_direction *= -1
+        # Perform small random human-like movements when not dodging
+        if random.random() < 0.3:  # Increased chance of random movement
+            if player.x > display.width // 2 and player.x - PLAYER_MOVE_SPEED >= 0:
+                player.x -= PLAYER_MOVE_SPEED  # Small left nudge
+            elif player.x < display.width // 2 and player.x + player.width + PLAYER_MOVE_SPEED <= display.width:
+                player.x += PLAYER_MOVE_SPEED  # Small right nudge
+
+        # Player will dodge based on shot proximity
+        player_avoid_shots()
+        player_move_timer = time.monotonic()  # Reset the timer
+
+def player_avoid_shots():
+    closest_shot = None
+    min_distance = float('inf')
+
+    # Find the closest shot to the player
+    for shot in invader_shots:
+        distance = abs(shot.x - player.x)
+        if distance < min_distance and shot.y > player.y - 60:  # Check shots within 60 pixels vertically
+            min_distance = distance
+            closest_shot = shot
+
+    # Dodge the closest shot if within a certain range
+    if closest_shot and min_distance < player.width * 1.5:
+        if closest_shot.x < player.x and player.x + player.width + DODGE_DISTANCE <= display.width:
+            player.x += DODGE_DISTANCE  # Dodge right
+        elif closest_shot.x > player.x and player.x - DODGE_DISTANCE >= 0:
+            player.x -= DODGE_DISTANCE  # Dodge left
+
+    # Ensure player stays within bounds after dodging
+    player.x = max(0, min(player.x, display.width - player.width))
 
 def shoot():
-    # Player shoots from its current position towards a random invader, more intelligent shots if AI level is high
     if invaders and player_intelligence > random.randint(0, 100):
-        target_invader = random.choice(invaders)
-        shot_x = player.x + player.width // 2 - 2  # Shoot from the center of the player
-        shot = Rect(shot_x, player.y - 10, 4, 10, fill=0xFFFFFF)
-        shots.append(shot)
-        screen.append(shot)
+        # Find invader closest to player.x to shoot
+        closest_invader = min(invaders, key=lambda invader: abs(invader.x - player.x))
+        if closest_invader and abs(closest_invader.x - player.x) < 50:  # Shoot only when aligned and close
+            shot_x = player.x + player.width // 2 - 2
+            shot = Rect(shot_x, player.y - 10, 4, 10, fill=0xFFFFFF)
+            shots.append(shot)
+            screen.append(shot)
 
 def invader_shoot():
-    # Invaders shoot from their current positions towards the player, smarter shots as intelligence increases
     if invaders and invader_intelligence > random.randint(0, 100):
-        shooting_invader = random.choice(invaders)
-        shot_x = shooting_invader.x + shooting_invader.width // 2 - 2  # Shoot from the center of the invader
+        # Target the player's position more accurately
+        shooting_invader = min(invaders, key=lambda invader: abs(invader.x - player.x))
+        shot_x = shooting_invader.x + shooting_invader.width // 2 - 2
         shot = Rect(shot_x, shooting_invader.y + 10, 4, 10, fill=0xFFFF00)
         invader_shots.append(shot)
         screen.append(shot)
@@ -143,7 +220,7 @@ def move_shots():
             invader_shots.remove(shot)
 
 def check_collisions():
-    global game_over
+    global game_over, player_lives
     for shot in shots[:]:
         for invader in invaders[:]:
             if (shot.x < invader.x + invader.width and
@@ -161,8 +238,13 @@ def check_collisions():
             shot.x + shot.width > player.x and
             shot.y < player.y + player.height and
             shot.height + shot.y > player.y):
-            game_over = True
-            show_game_over("Invaders Win!")
+            player_lives -= 1
+            lives_label.text = f"Lives: {player_lives}"
+            screen.remove(shot)
+            invader_shots.remove(shot)
+            if player_lives <= 0:
+                game_over = True
+                show_game_over("Invaders Win!")
             break
 
 def show_game_over(winner_text):
@@ -183,33 +265,43 @@ def show_game_over(winner_text):
     if "Player Wins!" in winner_text:
         player_wins += 1
         player_wins_label.text = f"Player Wins: {player_wins}"
+        update_backlight()  # Update backlight based on wins
         level_up()
     else:
         invader_wins += 1
         invader_wins_label.text = f"Invader Wins: {invader_wins}"
+        update_backlight()  # Update backlight based on wins
         reset_game()
 
 def level_up():
     global level, player_intelligence, invader_intelligence, invader_speed, player_shot_speed, invader_shot_speed
-    if level >= MAX_LEVEL:
-        level = 1  # Restart at level 1 after reaching level 100
-    else:
-        level += 1
+    level += 1
+    if level > MAX_LEVEL:
+        level = 1
+        # Reset intelligence when the level resets to 1
+        player_intelligence = MIN_INTELLIGENCE
+        invader_intelligence = MIN_INTELLIGENCE
 
-    level_label.text = f"Level: {level}"  # Update level display
-    player_intelligence = min(player_intelligence + 10, 100)  # Increase player intelligence up to a max of 100
-    invader_intelligence = min(invader_intelligence + 10, 100)  # Increase invader intelligence up to a max of 100
-    invader_speed = INVADER_SPEED_BASE + level * 0.05  # Increase invader speed
-    player_shot_speed += 0.02  # Increase player shot speed each level
-    invader_shot_speed += 0.02  # Increase invader shot speed each level
+    level_label.text = f"Level: {level}"
+    
+    # Increase intelligence and other parameters if not resetting to level 1
+    if level != 1:
+        player_intelligence = min(player_intelligence + 3, 100)
+        invader_intelligence = min(invader_intelligence + 3, 100)
+    
+    invader_speed = INVADER_SPEED_BASE + level * 0.02  # Slightly slower speed increase
+    player_shot_speed += 0.008  # Slower shot speed increase
+    invader_shot_speed += 0.008
     reset_game()
 
 def reset_game():
-    global shots, invader_shots, game_over
+    global shots, invader_shots, game_over, player_lives
+    player_lives = 3  # Reset lives at the start of a new game
+    lives_label.text = f"Lives: {player_lives}"
     # Remove all invaders and shots, but leave player and level label intact
     for obj in invaders + shots + invader_shots:
         screen.remove(obj)
-    create_invaders()
+    create_invaders()  # Recreate invaders with updated rows based on level
     shots = []
     invader_shots = []
     game_over = False
@@ -219,26 +311,21 @@ shots = []
 invader_shots = []
 create_invaders()
 display.show(screen)
+update_backlight()  # Set the initial state of the backlight
 
 # Main game loop with cooperative multitasking
 shoot_timer = 0
 invader_shoot_timer = 0
-invader_move_timer = time.monotonic()
-player_move_timer = time.monotonic()
 
 while game_running:
     current_time = time.monotonic()
 
     if not game_over:
         # Move invaders more frequently for faster movement
-        if current_time - invader_move_timer > 0.01:  # Reduced delay for faster movement
-            move_invaders()
-            invader_move_timer = current_time
+        move_invaders()
 
         # Move player at regular intervals
-        if current_time - player_move_timer > 0.1:
-            player_move()
-            player_move_timer = current_time
+        player_move()
 
         # Move shots at regular intervals
         move_shots()
@@ -246,9 +333,9 @@ while game_running:
         # Check for collisions
         check_collisions()
 
-        # Auto shoot every 2 seconds for both the player and invaders
+        # Auto shoot every 1.5 seconds for both the player and invaders
         shoot_timer += 1
-        if shoot_timer >= 40:
+        if shoot_timer >= 30:  # Shoot more frequently
             shoot()
             shoot_timer = 0
 
@@ -277,3 +364,4 @@ while game_running:
 
 while True:
     pass  # Keeps the program running after the game ends
+
