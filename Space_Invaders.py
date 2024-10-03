@@ -72,18 +72,18 @@ def update_backlight():
         pixels.fill((0, 0, 0))  # Backlight off if tied
 
 # Constants
-INVADER_SPEED_BASE = 0.5
-PLAYER_SHOT_SPEED_BASE = 0.1
-INVADER_SHOT_SPEED_BASE = 0.1
-PLAYER_MOVE_SPEED = 5  # Base movement speed
-DODGE_DISTANCE = 20    # Distance to move when dodging a shot
-CORNER_MOVE_TIMEOUT = 3  # 3 seconds in the corner before forced movement
+INVADER_SPEED_BASE = 0.7          # Increased base speed for more dynamic movement
+PLAYER_SHOT_SPEED_BASE = 0.15     # Slightly faster player shots for better responsiveness
+INVADER_SHOT_SPEED_BASE = 0.12    # Slightly faster invader shots to increase challenge
+PLAYER_MOVE_SPEED = 6             # Increased movement speed for more agile dodging
+DODGE_DISTANCE = 25               # Increased dodge distance for more effective avoidance
+CORNER_MOVE_TIMEOUT = 2           # Reduced timeout for quicker recovery from corners
 MAX_LEVEL = 100
-MIN_INTELLIGENCE = 45  # Minimum intelligence value for both player and invader
+MIN_INTELLIGENCE = 50             # Increased minimum intelligence for smarter AI
 
 # AI intelligence levels (1-100)
-player_intelligence = 45
-invader_intelligence = 45
+player_intelligence = 50          # Starting intelligence adjusted for better performance
+invader_intelligence = 50         # Starting intelligence adjusted for better performance
 
 # Game variables
 level = 1
@@ -95,13 +95,13 @@ invader_wins = 0
 total_games_played = 0
 game_over = False
 game_running = True
-player_lives = 10  # Player starts with 5 lives
+player_lives = 10  # Player starts with 10 lives
 
 # Timing for forced movement and delays for optimization
 corner_timer = None
 player_in_corner = False
-INVADER_MOVE_DELAY = 0.02  # Delay between invader movements
-PLAYER_MOVE_DELAY = 0.1
+INVADER_MOVE_DELAY = 0.015  # Faster invader movement
+PLAYER_MOVE_DELAY = 0.08     # Slightly faster player movement
 invader_move_timer = time.monotonic()
 player_move_timer = time.monotonic()
 
@@ -204,7 +204,7 @@ def player_move():
             player_in_corner = False  # Reset corner status when player is not in a corner
 
         # Perform small random human-like movements when not dodging
-        if random.random() < 0.3:  # Increased chance of random movement
+        if random.random() < 0.4:  # Increased chance of random movement for unpredictability
             if player.x > display.width // 2 and player.x - PLAYER_MOVE_SPEED >= 0:
                 player.x = int(player.x - PLAYER_MOVE_SPEED)  # Small left nudge, cast to int
             elif player.x < display.width // 2 and player.x + player.width + PLAYER_MOVE_SPEED <= display.width:
@@ -225,16 +225,16 @@ def player_avoid_shots():
     # Find the closest shot to the player
     for shot in invader_shots:
         distance = abs(shot.x - player.x)
-        if distance < min_distance and shot.y > player.y - 60:  # Check shots within 60 pixels vertically
+        if distance < min_distance and shot.y > player.y - 80:  # Increased vertical check range
             min_distance = distance
             closest_shot = shot
 
     # Dodge the closest shot if within a certain range
-    if closest_shot and min_distance < player.width * 1.5:
+    if closest_shot and min_distance < player.width * 2:
         if closest_shot.x < player.x and player.x + player.width + DODGE_DISTANCE <= display.width:
-            player.x += DODGE_DISTANCE  # Dodge right
+            player.x = int(player.x + DODGE_DISTANCE)  # Dodge right and cast to int
         elif closest_shot.x > player.x and player.x - DODGE_DISTANCE >= 0:
-            player.x -= DODGE_DISTANCE  # Dodge left
+            player.x = int(player.x - DODGE_DISTANCE)  # Dodge left and cast to int
 
     # Ensure player stays within bounds after dodging
     player.x = max(0, min(player.x, display.width - player.width))
@@ -243,7 +243,7 @@ def shoot():
     if invaders and player_intelligence > random.randint(0, 100):
         # Find invader closest to player.x to shoot
         closest_invader = min(invaders, key=lambda invader: abs(invader.x - player.x))
-        if closest_invader and abs(closest_invader.x - player.x) < 50:  # Shoot only when aligned and close
+        if closest_invader and abs(closest_invader.x - player.x) < 60:  # Increased alignment range
             shot_x = player.x + player.width // 2 - 2
             shot = Rect(shot_x, player.y - 10, 4, 10, fill=0xFFFFFF)
             shots.append(shot)
@@ -260,13 +260,13 @@ def invader_shoot():
 
 def move_shots():
     for shot in shots[:]:
-        shot.y -= int(player_shot_speed * 20)
+        shot.y -= int(player_shot_speed * 25)  # Increased shot movement speed
         if shot.y < 0:
             screen.remove(shot)
             shots.remove(shot)
 
     for shot in invader_shots[:]:
-        shot.y += int(invader_shot_speed * 20)
+        shot.y += int(invader_shot_speed * 25)  # Increased shot movement speed
         if shot.y > display.height:
             screen.remove(shot)
             invader_shots.remove(shot)
@@ -284,7 +284,7 @@ def check_collisions():
                 screen.remove(shot)
                 shots.remove(shot)
                 break
-    
+
     for shot in invader_shots[:]:
         if (shot.x < player.x + player.width and
             shot.x + shot.width > player.x and
@@ -306,8 +306,8 @@ def show_game_over(winner_text):
     text_area.x = (display.width - len(winner_text) * 6) // 2  # Approximate character width to center text
     text_area.y = display.height // 2 - 10  # Center vertically
     screen.append(text_area)
-    
-    time.sleep(5)  # Wait for 5 seconds before restarting the game
+
+    time.sleep(3)  # Reduced wait time for faster game flow
     screen.remove(text_area)
 
     # Update wins and total games
@@ -335,19 +335,19 @@ def level_up():
         invader_intelligence = MIN_INTELLIGENCE
 
     level_label.text = f"Level: {level}"
-    
+
     # Increase intelligence and other parameters more aggressively
     if level != 1:
-        player_intelligence = min(player_intelligence + 5, 100)  # Faster increase in intelligence
-        invader_intelligence = min(invader_intelligence + 3, 100)  # Keep invader intelligence growth moderate
+        player_intelligence = min(player_intelligence + 6, 100)  # Faster increase in intelligence
+        invader_intelligence = min(invader_intelligence + 4, 100)  # Slightly faster invader intelligence growth
 
     # Increase player speed and dodging abilities more aggressively
-    PLAYER_MOVE_SPEED += 0.5  # Gradually increase player speed
-    DODGE_DISTANCE += 1  # Increase dodge distance for more efficient dodging
-    
-    invader_speed = INVADER_SPEED_BASE + level * 0.015  # Slightly slower invader speed growth
-    player_shot_speed += 0.01  # Increase player shot speed faster
-    invader_shot_speed += 0.008  # Keep invader shot speed growth moderate
+    PLAYER_MOVE_SPEED += 0.6  # Gradually increase player speed
+    DODGE_DISTANCE += 1.5  # Increase dodge distance for more efficient dodging
+
+    invader_speed = INVADER_SPEED_BASE + level * 0.02  # Faster invader speed growth
+    player_shot_speed += 0.015  # Increase player shot speed faster
+    invader_shot_speed += 0.01  # Slightly increased invader shot speed growth
     reset_game()
 
 def reset_game():
@@ -389,14 +389,14 @@ while game_running:
         # Check for collisions
         check_collisions()
 
-        # Auto shoot every 1.5 seconds for both the player and invaders
+        # Auto shoot every 1.0 seconds for both the player and invaders
         shoot_timer += 1
-        if shoot_timer >= 30:  # Shoot more frequently
+        if shoot_timer >= 20:  # Increased shooting frequency
             shoot()
             shoot_timer = 0
 
         invader_shoot_timer += 1
-        if invader_shoot_timer >= 40:
+        if invader_shoot_timer >= 30:  # Increased invader shooting frequency
             invader_shoot()
             invader_shoot_timer = 0
 
@@ -413,10 +413,11 @@ while game_running:
             show_game_over("Player Wins!")
 
     else:
-        time.sleep(2)
+        time.sleep(1)
         reset_game()
 
-    time.sleep(0.01)  # Small delay to prevent maxing out CPU
+    time.sleep(0.005)  # Reduced delay for smoother gameplay
 
 while True:
     pass  # Keeps the program running after the game ends
+
