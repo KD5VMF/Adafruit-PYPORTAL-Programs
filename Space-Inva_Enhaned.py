@@ -61,7 +61,7 @@ display.show(screen)
 
 # Setup the backlight (using the onboard NeoPixel)
 pixels = neopixel.NeoPixel(board.NEOPIXEL, 1)
-pixels.brightness = 1.0  # Full brightness
+pixels.brightness = 0.8  # Slightly reduced brightness to prevent eye strain while maintaining visibility
 
 def update_backlight():
     if player_wins > invader_wins:
@@ -69,23 +69,23 @@ def update_backlight():
     elif invader_wins > player_wins:
         pixels.fill((255, 0, 0))  # Red for invader leading
     else:
-        pixels.fill((0, 0, 0))    # Backlight off if tied
+        pixels.fill((0, 0, 255))  # Blue for a tie to add visual variety
 
 # ---------------------------
 # Constants and Initial Setup
 # ---------------------------
-INVADER_SPEED_BASE = 0.7          # Base speed for invaders
-PLAYER_SHOT_SPEED_BASE = 0.15     # Player shot speed
-INVADER_SHOT_SPEED_BASE = 0.12    # Invader shot speed
-PLAYER_MOVE_SPEED = 6             # Player movement speed
-DODGE_DISTANCE = 25               # Distance to dodge shots
-CORNER_MOVE_TIMEOUT = 2           # Seconds before forced movement from corner
-MAX_LEVEL = 250                    # Updated to 250 levels
-MIN_INTELLIGENCE = 50             # Minimum intelligence for AI
+INVADER_SPEED_BASE = 1.0          # Increased base speed for invaders for more dynamic movement
+PLAYER_SHOT_SPEED_BASE = 0.25     # Increased player shot speed for quicker traversal
+INVADER_SHOT_SPEED_BASE = 0.2     # Increased invader shot speed for quicker traversal
+PLAYER_MOVE_SPEED = 8             # Increased player movement speed for smoother dodging
+DODGE_DISTANCE = 30               # Increased dodge distance for more noticeable movements
+CORNER_MOVE_TIMEOUT = 1.5         # Reduced timeout for quicker corner escapes
+MAX_LEVEL = 250                   # Retained maximum levels
+MIN_INTELLIGENCE = 50             # Retained minimum intelligence for AI
 
 # AI intelligence levels (1-100)
-player_intelligence = 50          # Player intelligence
-invader_intelligence = 50         # Invader intelligence
+player_intelligence = 60          # Slightly increased player intelligence for better shooting accuracy
+invader_intelligence = 60         # Slightly increased invader intelligence for more strategic shooting
 
 # Game variables
 level = 1
@@ -104,10 +104,17 @@ high_score = 0
 # Timing for forced movement and updates
 corner_timer = None
 player_in_corner = False
-INVADER_MOVE_DELAY = 0.015  # Invader movement delay in seconds
-PLAYER_MOVE_DELAY = 0.08     # Player movement delay in seconds
+INVADER_MOVE_DELAY = 0.012         # Reduced invader movement delay for smoother animation
+PLAYER_MOVE_DELAY = 0.06           # Reduced player movement delay for more responsive controls
 invader_move_timer = time.monotonic()
 player_move_timer = time.monotonic()
+
+# Shooting intervals
+PLAYER_SHOT_INTERVAL = 0.5         # Reduced interval between player shots for more frequent firing
+INVADER_SHOOT_BASE_DELAY = 2.0      # Decreased base delay for invaders to shoot faster
+INVADER_SHOOT_LEVEL_SCALING = 0.005 # Increased scaling factor for faster shooting as levels progress
+last_player_shot_time = time.monotonic()
+last_invader_shot_time = time.monotonic()
 
 # Lists to hold game objects
 invaders = []
@@ -227,13 +234,13 @@ class Invader:
     def __init__(self, x, y, invader_type):
         self.type = invader_type  # 'red', 'blue', 'yellow'
         self.hit_points = 1
-        self.color = 0xFF0000  # Default red
+        self.color = 0xFF4500  # OrangeRed as default red for better visibility
         if self.type == 'blue':
             self.hit_points = 2
-            self.color = 0x0000FF
+            self.color = 0x1E90FF  # DodgerBlue for a brighter blue
         elif self.type == 'yellow':
             self.hit_points = 3
-            self.color = 0xFFFF00
+            self.color = 0xFFD700  # Gold for a more vibrant yellow
         self.rect = Rect(x, y, 10, 10, fill=self.color)
         screen.append(self.rect)
         self.x_pos = float(x)
@@ -390,9 +397,6 @@ def shoot():
             shots.append(shot)
             screen.append(shot)
 
-# Initialize last shot time for player
-last_player_shot_time = time.monotonic()
-
 # ---------------------------
 # Invader Shooting
 # ---------------------------
@@ -405,9 +409,6 @@ def invader_shoot():
         shot = Rect(shot_x, shooting_invader.rect.y + 10, 4, 10, fill=0xFFFF00)
         invader_shots.append(shot)
         screen.append(shot)
-
-# Initialize last shot time for invaders
-last_invader_shot_time = time.monotonic()
 
 # ---------------------------
 # Move Shots
@@ -513,7 +514,7 @@ def show_game_over(winner_text):
                 high_score = score
                 high_score_label.text = f"High Score: {high_score}"
                 save_high_score()
-            
+
             # Display Game Completed message
             game_completed_text = "Game Completed!"
             text_completed = label.Label(terminalio.FONT, text=game_completed_text, color=0xFFFFFF)
@@ -629,12 +630,12 @@ while game_running:
         check_collisions()
 
         # Handle player shooting based on time intervals
-        if time.monotonic() - last_player_shot_time > 1.0:  # Player shoots every 1 second
+        if time.monotonic() - last_player_shot_time > PLAYER_SHOT_INTERVAL:  # Player shoots every 0.5 seconds
             shoot()
             last_player_shot_time = time.monotonic()
 
         # Handle invader shooting based on time intervals
-        invader_shoot_delay = max(0.15, 3.0 - (level * 0.012))  # Decrease delay as level increases, min 0.15s
+        invader_shoot_delay = max(0.1, INVADER_SHOOT_BASE_DELAY - (level * INVADER_SHOOT_LEVEL_SCALING))  # Decrease delay as level increases, min 0.1s
         if time.monotonic() - last_invader_shot_time > invader_shoot_delay:
             invader_shoot()
             last_invader_shot_time = time.monotonic()
